@@ -5,7 +5,7 @@
 Python script for length matching in the time domain in KiCad.
 
 Uses [pyfltk](https://pyfltk.sourceforge.io/) and
-[pyopenxl](openpyxl.readthedocs.io).
+[pyopenxl](https://openpyxl.readthedocs.io).
 
 ## Limitations
 
@@ -20,6 +20,10 @@ is not exposed by the python API.
 
 - Extra stubs must be calculated manualy and subtracted from the
 "Extra Delay" column in flytime spreadsheet.
+
+## TODO
+
+- Convert to pcbnew plugin to avoid reload of board file.
 
 ![](example.png)
 
