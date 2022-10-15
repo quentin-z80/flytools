@@ -76,8 +76,14 @@ class FlyWindow(Fl_Double_Window):
 
 if __name__ == "__main__":
     flytime_infofile = fl_file_chooser("Select Flytime info file", "*.json", None, 0)
+    if flytime_infofile is None:
+        sys.exit(1)
     pcbname = fl_file_chooser("Select PCB file", "*.kicad_pcb", None, 0)
+    if pcbname is None:
+        sys.exit(1)
     sheetname = fl_file_chooser("Select Spreadsheet file", "*.xlsx", None, 0)
+    if sheetname is None:
+        sys.exit(1)
     print("Loading PCB")
     board = pcbnew.LoadBoard(pcbname)
     ftools = flytools.FlyTools(board, flytime_infofile)
