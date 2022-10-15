@@ -74,7 +74,7 @@ class FlyTools:
         self.nets = self.board.GetNetsByNetcode()
 
     def reload(self) -> None:
-        pcbnew.Refresh()
+        self.board = pcbnew.LoadBoard(self.board.GetFileName())
         self.init_data()
 
     @staticmethod
@@ -303,6 +303,7 @@ class FlySheet:
         for ws in self.workbook.worksheets:
             self.sheet = ws
             self.update()
+        self.save()
 
 if __name__ == "__main__":
 
@@ -317,4 +318,3 @@ if __name__ == "__main__":
     flytools = FlyTools(board, "flytime_info.json")
     flysheet = FlySheet(xlsxfile, flytools)
     flysheet.updateAll()
-    flysheet.save()
