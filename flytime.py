@@ -75,11 +75,9 @@ class FlyWindow(Fl_Double_Window):
         Fl_add_timeout(0.5, self.check_pcb)
 
 if __name__ == "__main__":
-    flytime_infofile = "/home/quentin/Documents/qsbc/tools/flytime_info.json"
-    #pcbname = fl_file_chooser("Select PCB", "*.kicad_pcb", None, 0)
-    pcbname = "/home/quentin/Documents/qsbc/qsbc.kicad_pcb"
-    #sheetname = fl_file_chooser("Select Spreadsheetf", "*.xlsx", None, 0)
-    sheetname = "/home/quentin/Documents/qsbc/tools/DDR_flytimes.xlsx"
+    flytime_infofile = fl_file_chooser("Select Flytime info file", "*.json", None, 0)
+    pcbname = fl_file_chooser("Select PCB file", "*.kicad_pcb", None, 0)
+    sheetname = fl_file_chooser("Select Spreadsheet file", "*.xlsx", None, 0)
     print("Loading PCB")
     board = pcbnew.LoadBoard(pcbname)
     ftools = flytools.FlyTools(board, flytime_infofile)
