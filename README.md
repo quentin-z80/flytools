@@ -7,6 +7,10 @@ Python script for length matching in the time domain in KiCad.
 Uses [pyfltk](https://pyfltk.sourceforge.io/) and
 [pyopenxl](https://openpyxl.readthedocs.io).
 
+![](example.png)
+
+![](example_spreadsheet.png)
+
 ## Limitations
 
 - Uses physical length of traces, not electrical length
@@ -24,7 +28,3 @@ is not exposed by the python API.
 ## TODO
 
 - Convert to pcbnew plugin to avoid reload of board file.
-
-![](example.png)
-
-![](example_spreadsheet.png)
