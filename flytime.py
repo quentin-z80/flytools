@@ -55,7 +55,7 @@ class FlyWindow(Fl_Double_Window):
             print("PCB was modified, reloading board and updating nets")
             self.flytools.reload()
             self.update_delays()
-        Fl_add_timeout(0.5, self.check_pcb)
+        Fl_add_timeout(0.3, self.check_pcb)
 
     def update_spreadsheet(self, wid):
         print("Updating spreadsheet")
@@ -72,7 +72,7 @@ class FlyWindow(Fl_Double_Window):
             print(f"Error: {e}")
             return
         self.update_delays()
-        Fl_add_timeout(0.5, self.check_pcb)
+        Fl_add_timeout(0.3, self.check_pcb)
 
 if __name__ == "__main__":
     flytime_infofile = fl_file_chooser("Select Flytime info file", "*.json", None, 0)

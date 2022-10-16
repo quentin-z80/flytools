@@ -55,14 +55,16 @@ class FlyData:
 
 class FlyTools:
 
-    def __init__(self, board: pcbnew.BOARD, flytime_filename: str):
+    def __init__(self, board: pcbnew.BOARD, flytime_filename: str, standalone: bool = True):
         self.board = board
+        self.standalone = standalone
         self.flydata = FlyData(flytime_filename)
         self.init_data()
         self.boardmtime = os.path.getmtime(board.GetFileName())
 
     def init_data(self) -> None:
-        self.board.BuildListOfNets()
+        if self.standalone:
+            self.board.BuildListOfNets()
         self.nettracks = self.board.GetTracks()
         self.tracks = []
         self.vias = []
@@ -74,7 +76,8 @@ class FlyTools:
         self.nets = self.board.GetNetsByNetcode()
 
     def reload(self) -> None:
-        self.board = pcbnew.LoadBoard(self.board.GetFileName())
+        if self.standalone:
+            self.board = pcbnew.LoadBoard(self.board.GetFileName())
         self.init_data()
 
     @staticmethod
@@ -217,6 +220,12 @@ class FlyTools:
             self.boardmtime = cur_mtime
             return True
         return False
+
+    def selected_items(self):
+        for item in self.nettracks:
+            if item.IsSelected():
+                yield item
+
 
 class FlySheet:
 
