@@ -4,7 +4,7 @@
 
 Project contains 3 different tools:
 
-- [flytools.py](flytools.py) library for calculating delay of tracks / vias
+- [flytools.py](flytools.py) library for calculating delay of tracks / vias and updating a spreadsheet with each net's delay.
 
 - [flytime.py](flytime.py) GUI tool that displays the delay of a reference and target net, taking into account package and extra delays from a spreadsheet, and updates when the PCB file is saved
 
