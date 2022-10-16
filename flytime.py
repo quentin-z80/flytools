@@ -58,8 +58,12 @@ class FlyWindow(Fl_Double_Window):
         Fl_add_timeout(0.3, self.check_pcb)
 
     def update_spreadsheet(self, wid):
+        self.flysheet.reload()
         print("Updating spreadsheet")
-        self.flysheet.updateAll()
+        try:
+            self.flysheet.updateAll()
+        except flytools.NetNotFoundException as e:
+            fl_alert(e)
 
     def setnets(self, wid):
         print("Updating nets")
@@ -69,18 +73,21 @@ class FlyWindow(Fl_Double_Window):
             self.refnet = self.flytools.shortname_to_net(self.refnetin.value())
             self.targetnet = self.flytools.shortname_to_net(self.targetnetin.value())
         except flytools.NetNotFoundException as e:
-            print(f"Error: {e}")
+            fl_alert(e)
             return
         self.update_delays()
         Fl_add_timeout(0.3, self.check_pcb)
 
 if __name__ == "__main__":
-    flytime_infofile = fl_file_chooser("Select Flytime info file", "*.json", None, 0)
-    if flytime_infofile is None:
-        sys.exit(1)
     pcbname = fl_file_chooser("Select PCB file", "*.kicad_pcb", None, 0)
     if pcbname is None:
         sys.exit(1)
+    prjpath = os.path.dirname(pcbname)
+    flytime_infofile = os.path.join(prjpath, "flytime_info.json")
+    if not os.path.exists(flytime_infofile):
+        flytime_infofile = fl_file_chooser("Select Flytime info file", "*.json", None, 0)
+        if flytime_infofile is None:
+            sys.exit(1)
     sheetname = fl_file_chooser("Select Spreadsheet file", "*.xlsx", None, 0)
     if sheetname is None:
         sys.exit(1)

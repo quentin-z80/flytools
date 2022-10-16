@@ -235,6 +235,9 @@ class FlySheet:
         self.workbook = load_workbook(filename)
         self.sheet = self.workbook.active
 
+    def reload(self):
+        self.workbook = load_workbook(self.filename)
+
     def write(self, row: int, column: int, value):
         self.sheet.cell(row=row, column=column, value=value)
 
@@ -309,9 +312,11 @@ class FlySheet:
             self.updateRow(row[0].row)
 
     def updateAll(self):
+        old_sheet = self.sheet
         for ws in self.workbook.worksheets:
             self.sheet = ws
             self.update()
+        self.sheet = old_sheet
         self.save()
 
 if __name__ == "__main__":

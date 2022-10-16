@@ -19,7 +19,7 @@ class FlySelectedAction(pcbnew.ActionPlugin):
         prjpath = os.path.dirname(self.board.GetFileName())
         self.pcbnew_frame = wx.GetTopLevelParent(wx.GetActiveWindow())
 
-        flytime_infofile = os.path.join(prjpath, "flyinfo", "flytime_info.json")
+        flytime_infofile = os.path.join(prjpath, "flytime_info.json")
         if not os.path.exists(flytime_infofile):
             with wx.FileDialog(self.pcbnew_frame, "Open Flytime info file", wildcard="JSON files (*.json)|*.json",
                         style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
