@@ -34,10 +34,20 @@ class FlyWindow(Fl_Double_Window):
         self.refnet = None
         self.targetnet = None
 
+        self.callback(self.win_cb)
         self.setnetsbtn.callback(self.setnets)
         self.updatebtn.callback(self.update_spreadsheet)
 
+        Fl_add_timeout(0.3, self.check_pcb)
+
+    def win_cb(self, wid):
+        if Fl.event() == FL_SHORTCUT and Fl.event_key() == FL_Escape:
+            return
+        sys.exit(0)
+
     def update_delays(self):
+        if self.refnet is None or self.targetnet is None:
+            return
         refdelay = self.flytools.get_net_delay(self.refnet)
         refnetrow = self.flysheet.getRowByName(self.refnet.GetShortNetname())
         refdelay += self.flysheet.getFloatValue(refnetrow, "Extra Delay")
@@ -64,8 +74,8 @@ class FlyWindow(Fl_Double_Window):
         print("Updating spreadsheet")
         try:
             self.flysheet.updateAll()
-        except flytools.NetNotFoundException as e:
-            fl_alert(e)
+        except Exception as e:
+            fl_alert(str(e))
 
     def setnets(self, wid):
         print("Updating nets")
@@ -74,11 +84,10 @@ class FlyWindow(Fl_Double_Window):
         try:
             self.refnet = self.flytools.shortname_to_net(self.refnetin.value())
             self.targetnet = self.flytools.shortname_to_net(self.targetnetin.value())
-        except flytools.NetNotFoundException as e:
-            fl_alert(e)
+            self.update_delays()
+        except Exception as e:
+            fl_alert(str(e))
             return
-        self.update_delays()
-        Fl_add_timeout(0.3, self.check_pcb)
 
 if __name__ == "__main__":
     pcbname = fl_file_chooser("Select PCB file", "*.kicad_pcb", None, 0)

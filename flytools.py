@@ -9,13 +9,13 @@ import pcbnew
 from openpyxl import Workbook, load_workbook
 
 class TrackDelayNotFoundException(Exception):
-    def __init__(self, layer: str, width: float):
-        message = f"Track delay not found for track on layer {layer} with width {width}mm"
+    def __init__(self, netname: str, layer: str, width: float):
+        message = f"Track delay not found for track {netname} on layer {layer} with width {width}mm"
         super().__init__(message)
 
 class ViaDelayNotFoundException(Exception):
-    def __init__(self, width: float, drill: float, start: str, end: str) -> None:
-        message = f"Via delay not found for via with {width} width, {drill} drill, {start} start, {end} end"
+    def __init__(self, netname: str, width: float, drill: float, start: str, end: str) -> None:
+        message = f"Via delay not found for via {netname} with {width} width, {drill} drill, {start} start, {end} end"
         super().__init__(message)
 
 class ViaLayersException(Exception):
@@ -35,17 +35,17 @@ class FlyData:
     def __init__(self, filename: str):
         self.flytime_data = json.loads(open(filename).read())
 
-    def get_track_pspcm(self, layer: str, width: float) -> float:
+    def get_track_pspcm(self, netname: str, layer: str, width: float) -> float:
         for entry in self.flytime_data["tracks"][layer]:
             if entry["width"] == width:
                 return entry["ps_per_cm"]
-        raise TrackDelayNotFoundException(layer, width)
+        raise TrackDelayNotFoundException(netname, layer, width)
 
-    def get_via_delay(self, width: float, drill: float, start: str, end: str):
+    def get_via_delay(self, netname: str, width: float, drill: float, start: str, end: str):
         for entry in self.flytime_data["vias"]:
             if entry["width"] == width and entry["drill"] == drill and entry["start"] == start and entry["end"] == end:
                 return entry["delay"]
-        raise ViaDelayNotFoundException(width, drill, start, end)
+        raise ViaDelayNotFoundException(netname, width, drill, start, end)
 
     def get_via_height(self, width: float, drill: float, start: str, end: str):
         for entry in self.flytime_data["vias"]:
@@ -109,9 +109,10 @@ class FlyTools:
 
     def get_track_delay(self, track: pcbnew.PCB_TRACK) -> float:
         layer = track.GetLayerName()
+        netname = track.GetShortNetname()
         length = pcbnew.ToMM(track.GetLength())
         width = pcbnew.ToMM(track.GetWidth())
-        pspcm = self.flydata.get_track_pspcm(layer, width)
+        pspcm = self.flydata.get_track_pspcm(netname, layer, width)
         return self.mm_to_ps(pspcm, length)
 
     def get_track_lengths(self, net: pcbnew.NETINFO_ITEM) -> float:
@@ -123,12 +124,13 @@ class FlyTools:
         return length
 
     def get_via_delay(self, via: pcbnew.PCB_VIA) -> float:
+        netname = via.GetShortNetname()
         start, end = self.via_start_end(via)
         start = pcbnew.LayerName(start)
         end = pcbnew.LayerName(end)
         drill = pcbnew.ToMM(via.GetDrillValue())
         width = pcbnew.ToMM(via.GetWidth())
-        delay = self.flydata.get_via_delay(width, drill, start, end)
+        delay = self.flydata.get_via_delay(netname, width, drill, start, end)
         return delay
 
     def get_via_length(self, via: pcbnew.PCB_VIA) -> float:
