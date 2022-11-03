@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import random
 
 from fltk import *
 import pcbnew
@@ -63,10 +62,22 @@ class FlyWindow(Fl_Double_Window):
         self.diffout.value(str(round(targetdelay-refdelay, 2)))
 
     def check_pcb(self):
-        if self.flytools.is_pcb_modified():
+        try:
+            modified = self.flytools.is_pcb_modified()
+        # fix for race condition when saving pcb
+        except FileNotFoundError:
+            print("PCB file not found, retrying")
+            Fl_add_timeout(1, self.check_pcb)
+            return
+        if modified:
             print("PCB was modified, reloading board and updating nets")
             self.flytools.reload()
-            self.update_delays()
+            try:
+                self.update_delays()
+            except Exception as e:
+                print(repr(e))
+                Fl_add_timeout(1, self.check_pcb)
+                return
         Fl_add_timeout(0.3, self.check_pcb)
 
     def update_spreadsheet(self, wid):
@@ -80,8 +91,8 @@ class FlyWindow(Fl_Double_Window):
     def setnets(self, wid):
         print("Updating nets")
         sheetname = self.sheetnamein.value()
-        self.flysheet.setSheet(sheetname)
         try:
+            self.flysheet.setSheet(sheetname)
             self.refnet = self.flytools.shortname_to_net(self.refnetin.value())
             self.targetnet = self.flytools.shortname_to_net(self.targetnetin.value())
             self.update_delays()

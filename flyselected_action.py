@@ -45,6 +45,3 @@ class FlySelectedAction(pcbnew.ActionPlugin):
 
         delay = round(delay, 2)
         wx.MessageDialog(self.pcbnew_frame, f"Tracks: {tracks}, Vias: {vias}\nTotal delay: {delay} ps", "Flytime of selected elements", wx.OK).ShowModal()
-
-
-
