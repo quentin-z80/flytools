@@ -37,9 +37,9 @@ class FlySelectedAction(pcbnew.ActionPlugin):
         tracks = 0
         vias = 0
         for item in self.ftools.selected_items():
-            if type(item) == pcbnew.PCB_TRACK or type(item) == pcbnew.PCB_ARC:
+            if item.GetClass() == "PCB_TRACK" or item.GetClass() == "PCB_ARC":
                 tracks += 1
-            elif type(item) == pcbnew.PCB_VIA:
+            elif item.GetClass() == "PCB_VIA":
                 vias += 1
             delay += self.ftools.get_element_delay(item)
 

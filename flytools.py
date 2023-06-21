@@ -69,14 +69,15 @@ class FlyTools:
         self.tracks = []
         self.vias = []
         for track in self.nettracks:
-            if type(track) == pcbnew.PCB_TRACK or type(track) == pcbnew.PCB_ARC:
+            if track.GetClass() == "PCB_TRACK" or track.GetClass() == "PCB_ARC":
                 self.tracks.append(track)
-            elif type(track) == pcbnew.PCB_VIA:
+            elif track.GetClass() == "PCB_VIA":
                 self.vias.append(track)
         self.nets = self.board.GetNetsByNetcode()
 
     def reload(self) -> None:
         if self.standalone:
+            # TODO: debug memory leak here
             self.board = pcbnew.LoadBoard(self.board.GetFileName())
         self.init_data()
 
@@ -100,12 +101,12 @@ class FlyTools:
 
     def get_element_delay(self, element: pcbnew.BOARD_CONNECTED_ITEM) -> float:
         """Get the delay of a single element in ps"""
-        if type(element) == pcbnew.PCB_TRACK or type(element) == pcbnew.PCB_ARC:
+        if element.GetClass() == "PCB_TRACK" or element.GetClass() == "PCB_ARC":
             return self.get_track_delay(element)
-        elif type(element) == pcbnew.PCB_VIA:
+        elif element.GetClass() == "PCB_VIA":
             return self.get_via_delay(element)
         else:
-            raise UnhandeledElementException(element)
+            raise UnhandeledElementException(element.GetClass())
 
     def get_track_delay(self, track: pcbnew.PCB_TRACK) -> float:
         layer = track.GetLayerName()
@@ -227,7 +228,6 @@ class FlyTools:
         for item in self.nettracks:
             if item.IsSelected():
                 yield item
-
 
 class FlySheet:
 
