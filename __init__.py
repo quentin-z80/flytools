@@ -1,2 +1,2 @@
-from .flyselected_action import FlySelectedAction
-FlySelectedAction().register()
+from .flytools_action import FlyToolsAction
+FlyToolsAction().register()

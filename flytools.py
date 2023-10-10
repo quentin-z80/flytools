@@ -1,336 +1,183 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import json
 
 import pcbnew
+import wx
 
-from openpyxl import Workbook, load_workbook
+class FlyToolsPage:
+    def __init__(self, name: str):
+        self.name = name
 
-class TrackDelayNotFoundException(Exception):
-    def __init__(self, netname: str, layer: str, width: float):
-        message = f"Track delay not found for track {netname} on layer {layer} with width {width}mm"
-        super().__init__(message)
+    @classmethod
+    def from_config(cls, config: dict):
+        return cls(config['name'])
 
-class ViaDelayNotFoundException(Exception):
-    def __init__(self, netname: str, width: float, drill: float, start: str, end: str) -> None:
-        message = f"Via delay not found for via {netname} with {width} width, {drill} drill, {start} start, {end} end"
-        super().__init__(message)
-
-class ViaLayersException(Exception):
-    def __init__(self, via: pcbnew.PCB_VIA):
-        message = f"Via on net {via.GetNetname()} has unknown start and stop layers"
-        super().__init__(message)
-
-class UnhandeledElementException(Exception):
-    def __init__(self, element: pcbnew.BOARD_CONNECTED_ITEM):
-        super().__init__(f"Unhandeled element: {element}")
-
-class NetNotFoundException(Exception):
-    def __init__(self, netname: str):
-        super().__init__(f"Net {netname} not found")
-
-class FlyData:
-    def __init__(self, filename: str):
-        self.flytime_data = json.loads(open(filename).read())
-
-    def get_track_pspcm(self, netname: str, layer: str, width: float) -> float:
-        for entry in self.flytime_data["tracks"][layer]:
-            if entry["width"] == width:
-                return entry["ps_per_cm"]
-        raise TrackDelayNotFoundException(netname, layer, width)
-
-    def get_via_delay(self, netname: str, width: float, drill: float, start: str, end: str):
-        for entry in self.flytime_data["vias"]:
-            if entry["width"] == width and entry["drill"] == drill and entry["start"] == start and entry["end"] == end:
-                return entry["delay"]
-        raise ViaDelayNotFoundException(netname, width, drill, start, end)
-
-    def get_via_height(self, width: float, drill: float, start: str, end: str):
-        for entry in self.flytime_data["vias"]:
-            if entry["width"] == width and entry["drill"] == drill and entry["start"] == start and entry["end"] == end:
-                return entry["height"]
-        raise ViaDelayNotFoundException(width, drill, start, end)
+    def to_config(self) -> dict:
+        return {
+            'name': self.name
+        }
 
 class FlyTools:
 
-    def __init__(self, board: pcbnew.BOARD, flytime_filename: str, standalone: bool = True):
-        self.board = board
-        self.standalone = standalone
-        self.flydata = FlyData(flytime_filename)
-        self.init_data()
-        self.boardmtime = os.path.getmtime(board.GetFileName())
+    def default_config(self) -> dict:
+        return json.load(open(os.path.join(self.install_dir, "flytools_defaults.json")))
 
-    def init_data(self) -> None:
-        if self.standalone:
-            self.board.BuildListOfNets()
-        self.nettracks = self.board.GetTracks()
-        self.tracks = []
-        self.vias = []
-        for track in self.nettracks:
-            if track.GetClass() == "PCB_TRACK" or track.GetClass() == "PCB_ARC":
-                self.tracks.append(track)
-            elif track.GetClass() == "PCB_VIA":
-                self.vias.append(track)
-        self.nets = self.board.GetNetsByNetcode()
+    def save_config(self) -> None:
 
-    def reload(self) -> None:
-        if self.standalone:
-            # TODO: debug memory leak here
-            self.board = pcbnew.LoadBoard(self.board.GetFileName())
-        self.init_data()
+        config = self.default_config()
 
-    @staticmethod
-    def mm_to_ps(pspcm: float, mm: float) -> float:
-        return mm * (pspcm / 10)
+        # save all flytime pages
+        for page in self.pages:
+            config['pages'].append(page.to_config())
 
-    def via_start_end(self, via: pcbnew.PCB_VIA) -> tuple:
-        """Gets the first and last connected layer of a via"""
-        toplayer = None
-        bottomlayer = None
-        for layer in range(via.TopLayer(), via.BottomLayer() + 1):
-            if (self.board.GetConnectivity().IsConnectedOnLayer(via, layer)):
-                if toplayer is None:
-                    toplayer = layer
-                else:
-                    bottomlayer = layer
-        if toplayer is None or bottomlayer is None:
-            raise ViaLayersException(via)
-        return (toplayer, bottomlayer)
+        json.dump(config, open(self.config_file, 'w'), indent=4)
 
-    def get_element_delay(self, element: pcbnew.BOARD_CONNECTED_ITEM) -> float:
-        """Get the delay of a single element in ps"""
-        if element.GetClass() == "PCB_TRACK" or element.GetClass() == "PCB_ARC":
-            return self.get_track_delay(element)
-        elif element.GetClass() == "PCB_VIA":
-            return self.get_via_delay(element)
+    def load_config(self) -> None:
+        if os.path.exists(self.config_file):
+            config = json.load(open(self.config_file))
         else:
-            raise UnhandeledElementException(element.GetClass())
+            config = self.default_config()
 
-    def get_track_delay(self, track: pcbnew.PCB_TRACK) -> float:
-        layer = track.GetLayerName()
-        netname = track.GetShortNetname()
-        length = pcbnew.ToMM(track.GetLength())
-        width = pcbnew.ToMM(track.GetWidth())
-        pspcm = self.flydata.get_track_pspcm(netname, layer, width)
-        return self.mm_to_ps(pspcm, length)
+        # load all flytime pages
+        self.pages = []
+        for page in config['pages']:
+            self.pages.append(FlyToolsPage.from_config(page))
 
-    def get_track_lengths(self, net: pcbnew.NETINFO_ITEM) -> float:
-        """Get the length of all tracks on a net in mm"""
-        length = 0
-        for track in self.tracks:
-            if track.GetNetCode() == net.GetNetCode():
-                length += pcbnew.ToMM(track.GetLength())
-        return length
+    def __init__(self, pcb: pcbnew.BOARD, config_file: str) -> None:
+        self.install_dir = os.path.dirname(__file__)
+        self.pcb = pcb
+        self.config_file = config_file
+        self.load_config()
 
-    def get_via_delay(self, via: pcbnew.PCB_VIA) -> float:
-        netname = via.GetShortNetname()
-        start, end = self.via_start_end(via)
-        start = pcbnew.LayerName(start)
-        end = pcbnew.LayerName(end)
-        drill = pcbnew.ToMM(via.GetDrillValue())
-        width = pcbnew.ToMM(via.GetWidth())
-        delay = self.flydata.get_via_delay(netname, width, drill, start, end)
-        return delay
+    def get_pages(self) -> list:
+        return self.pages
 
-    def get_via_length(self, via: pcbnew.PCB_VIA) -> float:
-        """Get the length of a via in mm"""
-        #stackup = self.board.GetDesignSettings().GetStackupDescriptor()
-        width = pcbnew.ToMM(via.GetWidth())
-        drill = pcbnew.ToMM(via.GetDrillValue())
-        start, end = self.via_start_end(via)
-        start = pcbnew.LayerName(start)
-        end = pcbnew.LayerName(end)
-        #return stackup.getLayerDistance(start, end)
-        return self.flydata.get_via_height(width, drill, start, end)
+    def add_page(self, name: str) -> None:
+        if name not in [page.name for page in self.pages]:
+            self.pages.append(FlyToolsPage(name))
+            self.save_config()
 
+    def remove_page(self, name: str) -> None:
+        if name in [page.name for page in self.pages]:
+            self.pages = [page for page in self.pages if page.name != name]
+            self.save_config()
 
-    def get_via_lengths(self, net: pcbnew.NETINFO_ITEM) -> float:
-        """Get the length of all vias on a net in mm"""
-        length = 0
-        for via in self.vias:
-            if via.GetNetCode() == net.GetNetCode():
-                length += self.get_via_length(via)
-        return length
+class SetupPanel(wx.Panel):
 
-    def get_items(self, net: pcbnew.NETINFO_ITEM) -> list[pcbnew.BOARD_CONNECTED_ITEM]:
-        """Get all items on a net by shortname"""
-        items = []
-        for track in self.nettracks:
-            if track.GetNetCode() == net.GetNetCode():
-                items.append(track)
-        return items
+    def set_add_page_cb(self, cb) -> None:
+        self.remote_add_page_cb = cb
 
-    def get_net_tracks_delay(self, net: pcbnew.NETINFO_ITEM) -> float:
-        """Get the delay of all tracks on a net in ps"""
-        delay = 0
-        for track in self.tracks:
-            if track.GetNetCode() == net.GetNetCode():
-                delay += self.get_element_delay(track)
-        return delay
+    def set_remove_page_cb(self, cb) -> None:
+        self.remote_remove_page_cb = cb
 
-    def get_net_via_delays(self, net: pcbnew.NETINFO_ITEM) -> float:
-        """Get the delay of all vias on a net in ps"""
-        delay = 0
-        for element in self.vias:
-            if element.GetNetCode() == net.GetNetCode():
-                delay += self.get_element_delay(element)
-        return delay
+    def add_page_cb(self, event) -> None:
+        if self.remote_add_page_cb is None:
+            raise Exception("add_page_cb not registered")
+        self.remote_add_page_cb(event)
 
-    def get_num_vias(self, net: pcbnew.NETINFO_ITEM) -> int:
-        """Get the number of vias on a net"""
-        num = 0
-        for element in self.vias:
-            if element.GetNetCode() == net.GetNetCode():
-                num += 1
-        return num
+    def remove_page_cb(self, event) -> None:
+        if self.remote_remove_page_cb is None:
+            raise Exception("remove_page_cb not registered")
+        self.remote_remove_page_cb(event)
 
-    def get_layers(self, net: pcbnew.NETINFO_ITEM) -> list[str]:
-        """Get the layers of a net"""
-        layers = []
-        for track in self.tracks:
-            if track.GetNetCode() == net.GetNetCode():
-                name = track.GetLayerName()
-                if name not in layers:
-                    layers.append(name)
-        return layers
+    def __init__(self, parent: wx.Window) -> None:
+        super().__init__(parent)
+        self.parent = parent
+        self.sizer = wx.BoxSizer(wx.VERTICAL)
 
-    def get_net_delay(self, net: pcbnew.NETINFO_ITEM) -> float:
-        """Get the delay of a net in ps"""
-        delay = 0
-        for element in self.get_items(net):
-            delay += self.get_element_delay(element)
-        return delay
+        self.remote_add_page_cb = None
+        self.remote_remove_page_cb = None
 
-    def name_to_net(self, name: str) -> pcbnew.NETINFO_ITEM:
-        """Get a net by name"""
-        pcbnew.NETINFO_ITEM(self.board, name)
-        raise NetNotFoundException(name)
+        # page name entry box
+        self.pagesizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.page_name_box = wx.TextCtrl(self, size=(100, -1))
+        self.pagesizer.Add(self.page_name_box, 0, wx.ALL | wx.ALIGN_CENTER, 5)
+        self.add_page_button = wx.Button(self, label="Add Page")
+        self.add_page_button.Bind(wx.EVT_BUTTON, self.add_page_cb)
+        self.remove_page_button = wx.Button(self, label="Remove Page")
+        self.remove_page_button.Bind(wx.EVT_BUTTON, self.remove_page_cb)
+        self.pagesizer.Add(self.add_page_button, 0, wx.ALL, 5)
+        self.pagesizer.Add(self.remove_page_button, 0, wx.ALL, 5)
 
-    def shortname_to_net(self, shortname: str) -> pcbnew.NETINFO_ITEM:
-        """Get a net by shortname"""
-        for net in self.nets.items():
-            if net[1].GetShortNetname() == shortname:
-                return net[1]
-        raise NetNotFoundException(shortname)
+        self.sizer.Add(self.pagesizer, 0, wx.ALL, 5)
 
-    def is_pcb_modified(self) -> bool:
-        """returns true if the pcb was modified since last call
-        """
-        cur_mtime = os.path.getmtime(self.board.GetFileName())
-        if cur_mtime > self.boardmtime:
-            self.boardmtime = cur_mtime
-            return True
-        return False
+        self.SetSizer(self.sizer)
 
-    def selected_items(self):
-        for item in self.nettracks:
-            if item.IsSelected():
-                yield item
+class FlyPage(wx.Panel):
+    def __init__(self, parent, flytools_page: FlyToolsPage):
+        super().__init__(parent)
 
-class FlySheet:
+        self.parent = parent
+        self.flytools_page = flytools_page
 
-    def __init__(self, filename: str, flytools: FlyTools):
-        self.filename = filename
-        self.flytools = flytools
-        self.workbook = load_workbook(filename)
-        self.sheet = self.workbook.active
+        self.sizer = wx.BoxSizer(wx.VERTICAL)
 
-    def reload(self):
-        self.workbook = load_workbook(self.filename)
+        self.sizer.Add(wx.StaticText(self, label="Fly"), 0, wx.ALL, 5)
 
-    def write(self, row: int, column: int, value):
-        self.sheet.cell(row=row, column=column, value=value)
+        self.SetSizer(self.sizer)
 
-    def save(self):
-        self.workbook.save(self.filename)
+class DmPage(wx.Panel):
+    def __init__(self, parent):
+        super().__init__(parent)
 
-    def setSheet(self, name: str):
-        self.sheet = self.workbook[name]
+        self.parent = parent
 
-    def getColByName(self, name: str) -> int:
-        for col in range(1, self.sheet.max_column + 1):
-            if self.sheet.cell(row=1, column=col).value == name:
-                return col
-        raise Exception(f"Column {name} not found")
+        self.sizer = wx.BoxSizer(wx.VERTICAL)
 
-    def getRowByName(self, name: str) -> int:
-        for row in range(1, self.sheet.max_row + 1):
-            if self.sheet.cell(row=row, column=2).value == name:
-                return row
-        raise Exception(f"Row {name} not found")
+        self.sizer.Add(wx.StaticText(self, label="Delay Matching"), 0, wx.ALL, 5)
 
-    def getFloatValue(self, row: int, column: str) -> float:
-        col = self.getColByName(column)
-        val = self.sheet.cell(row=row, column=col).value
-        if val is None:
-            self.sheet.cell(row=row, column=col).value = 0.0
-            return 0.0
-        return float(val)
+        # self.SetSizer(self.sizer)
 
-    def getValue(self, row: int, column: str) -> str:
-        col = self.getColByName(column)
-        val = self.sheet.cell(row=row, column=col).value
-        return val
+class FlyToolsFrame(wx.Frame):
 
-    def setValue(self, row: int, col: str, value: str or float):
-        col = self.getColByName(col)
-        self.write(row, col, value)
+    def add_page_cb(self, event) -> None:
+        self.flytools.add_page(self.setup_panel.page_name_box.GetValue())
+        self.add_pages(self.nb)
 
-    def updateRow(self, row: int):
+    def remove_page_cb(self, event) -> None:
+        self.flytools.remove_page(self.setup_panel.page_name_box.GetValue())
+        self.add_pages(self.nb)
 
-        netname = self.getValue(row, "Net")
-        if netname is None:
-            return
-        net = self.flytools.shortname_to_net(netname)
+    def add_pages(self, nb: wx.Notebook) -> None:
 
-        r = 2
+        self.pagepanels = []
+        while self.nb.GetPageCount() > 0:
+            self.nb.RemovePage(0)
 
-        num_vias = self.flytools.get_num_vias(net)
-        layers = self.flytools.get_layers(net)
-        track_len = round(self.flytools.get_track_lengths(net), r)
-        via_len = round(self.flytools.get_via_lengths(net), r)
-        total_len = track_len + via_len
-        track_delay = round(self.flytools.get_net_tracks_delay(net), r)
-        via_delay = round(self.flytools.get_net_via_delays(net), r)
+        self.nb.AddPage(self.setup_panel, "Setup")
+        self.nb.AddPage(self.dm_panel, "Delay Matching")
 
-        package_delay = self.getFloatValue(row, "Package Delay")
-        extra_delay = self.getFloatValue(row, "Extra Delay")
+        for page in self.flytools.get_pages():
+            self.pagepanels.append(FlyPage(nb, page))
+            nb.AddPage(self.pagepanels[-1], page.name)
 
-        total_delay = track_delay + via_delay + package_delay + extra_delay
+    def __init__(self, pcb: pcbnew.BOARD, parent=None, style=wx.DEFAULT_FRAME_STYLE):
+        super().__init__(parent=parent, style=style, title='flytools')
 
-        self.setValue(row, "Vias", num_vias)
-        self.setValue(row, "Layers", ", ".join(layers))
-        self.setValue(row, "Track Length", track_len)
-        self.setValue(row, "Via Length", via_len)
-        self.setValue(row, "Total Length", total_len)
-        self.setValue(row, "Track Delay", track_delay)
-        self.setValue(row, "Via Delay", via_delay)
-        self.setValue(row, "Total Delay", total_delay)
+        self.install_dir = os.path.dirname(__file__)
+        self.SetIcon(wx.Icon(os.path.join(self.install_dir, 'flytools.png')))
 
-    def update(self):
-        for row in self.sheet.iter_rows(min_row=2):
-            self.updateRow(row[0].row)
+        config_file = os.path.join(os.path.dirname(pcb.GetFileName()), 'flytools.json')
+        self.flytools = FlyTools(pcb, config_file)
 
-    def updateAll(self):
-        old_sheet = self.sheet
-        for ws in self.workbook.worksheets:
-            self.sheet = ws
-            self.update()
-        self.sheet = old_sheet
-        self.save()
+        self.nb = wx.Notebook(self)
 
-if __name__ == "__main__":
+        self.setup_panel = SetupPanel(self.nb)
+        self.setup_panel.set_add_page_cb(self.add_page_cb)
+        self.setup_panel.set_remove_page_cb(self.remove_page_cb)
 
-    if len(sys.argv) < 2:
-        print("Usage: flytools.py <kicad_pcb> <spreadsheet>")
-        sys.exit(1)
+        self.dm_panel = DmPage(self.nb)
 
-    pcbfile = sys.argv[1]
-    xlsxfile = sys.argv[2]
+        self.add_pages(self.nb)
 
-    board = pcbnew.LoadBoard(pcbfile)
-    flytools = FlyTools(board, "flytime_info.json")
-    flysheet = FlySheet(xlsxfile, flytools)
-    flysheet.updateAll()
+if __name__ == '__main__':
+    app = wx.App()
+    dlg = wx.FileDialog(None, "select a kicad pcb", style=wx.FD_DEFAULT_STYLE | wx.FD_FILE_MUST_EXIST, wildcard="*.kicad_pcb")
+    if dlg.ShowModal() != wx.ID_OK:
+        exit(1)
+    pcb = pcbnew.LoadBoard(dlg.GetPath())
+    frame = FlyToolsFrame(pcb)
+    frame.Show()
+    app.MainLoop()
